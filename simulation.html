@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUMO 교통 시뮬레이션 대시보드 (임시)</title>
+    <style>
+        /* 기본 스타일 리셋 및 배경 설정 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #1e1e24;
+            color: #fff;
+            display: flex;
+            height: 100vh;
+        }
+
+        /* 왼쪽 사이드바 (설정창) */
+        .sidebar {
+            width: 300px;
+            background-color: #2a2a35;
+            padding: 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .sidebar h2 {
+            margin-top: 0;
+            color: #4caf50;
+            border-bottom: 2px solid #4caf50;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 14px;
+            color: #ccc;
+        }
+
+        input, select {
+            padding: 10px;
+            background-color: #3b3b4c;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 4px;
+        }
+
+        /* 시뮬레이션 시작 버튼 */
+        .start-btn {
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 10px;
+        }
+
+        .start-btn:hover {
+            background-color: #45a049;
+        }
+
+        /* 오른쪽 메인 화면 (시뮬레이션 영역) */
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .view-screen {
+            flex: 1;
+            background-color: #111;
+            border: 2px dashed #444;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 대기/로딩/완료 상태를 위한 텍스트 스타일 */
+        .status-text {
+            font-size: 20px;
+            color: #888;
+            text-align: center;
+        }
+
+        /* 가짜 프로그레스 바 (로딩 바) */
+        .progress-container {
+            display: none;
+            width: 60%;
+            background-color: #333;
+            border-radius: 10px;
+            padding: 3px;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 20px;
+            background-color: #4caf50;
+            border-radius: 8px;
+            transition: width 0.1s linear;
+        }
+
+        /* 시뮬레이션 완료 시 보여줄 가짜 지도/결과 그래픽 */
+        .fake-map {
+            display: none;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, #2c3e50 10%, #1a252f 90%);
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* 가짜 도로 및 차량 노드 표현 (진짜처럼 보이게) */
+        .road {
+            position: absolute;
+            background-color: #555;
+        }
+        .road-h { width: 100%; height: 20px; top: 50%; left: 0; transform: translateY(-50%); }
+        .road-v { width: 20px; height: 100%; top: 0; left: 50%; transform: translateX(-50%); }
+
+        .car {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #ff5722;
+            border-radius: 50%;
+            animation: moveCar 4s infinite linear;
+        }
+
+        @keyframes moveCar {
+            0% { left: 0; top: 49%; }
+            100% { left: 100%; top: 49%; }
+        }
+
+        /* 하단 로그 창 */
+        .log-window {
+            height: 150px;
+            background-color: #000;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #00ff00;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>SUMO 설정</h2>
+        <div class="form-group">
+            <label for="map">네트워크 맵 선택</label>
+            <select id="map">
+                <option value="seoul">서울 강남역 격자 도로망</option>
+                <option value="highway">경부고속도로 진입로</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="vehicles">차량 투입 수 (vph)</label>
+            <input type="number" id="vehicles" value="1000" min="100" max="5000">
+        </div>
+        <div class="form-group">
+            <label for="time">시뮬레이션 시간 (초)</label>
+            <input type="number" id="time" value="3600">
+        </div>
+        <button class="start-btn" onclick="startFakeSimulation()">시뮬레이션 시작</button>
+    </div>
+
+    <div class="main-content">
+        <div class="view-screen" id="viewScreen">
+            <div id="initialText" class="status-text">
+                좌측 설정을 확인하고 [시뮬레이션 시작] 버튼을 누르세요.
+            </div>
+
+            <div id="loadingBox" class="progress-container">
+                <div style="text-align: center; margin-bottom: 10px; color: #4caf50;">SUMO 시뮬레이션 엔진 구동 중...</div>
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+
+            <div id="fakeMap" class="fake-map">
+                <div class="road road-h"></div>
+                <div class="road road-v"></div>
+                <div class="car" style="animation-delay: 0s;"></div>
+                <div class="car" style="animation-delay: 1.5s;"></div>
+                <div class="car" style="animation-delay: 3s;"></div>
+                <div style="position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 14px;">
+                    🟢 실시간 차량 흐름 시뮬레이션 중...
+                </div>
+            </div>
+        </div>
+
+        <div class="log-window" id="logWindow">
+            [SYSTEM] SUMO 가상 환경이 준비되었습니다.<br>
+        </div>
+    </div>
+
+    <script>
+        function addLog(text) {
+            const logWindow = document.getElementById('logWindow');
+            logWindow.innerHTML += `[${new Date().toLocaleTimeString()}] ${text}<br>`;
+            logWindow.scrollTop = logWindow.scrollHeight;
+        }
+
+        function startFakeSimulation() {
+            const mapName = document.getElementById('map').value;
+            const vehicleCount = document.getElementById('vehicles').value;
+            
+            // 화면 전환
+            document.getElementById('initialText').style.display = 'none';
+            document.getElementById('fakeMap').style.display = 'none';
+            document.getElementById('loadingBox').style.display = 'block';
+            
+            addLog(`SUMO 네트워크 로딩 시작... (맵: ${mapName})`);
+            addLog(`차량 빈도 설정 완료: ${vehicleCount} vph`);
+
+            // 가짜 프로그레스 바 애니메이션
+            let width = 0;
+            const progressBar = document.getElementById('progressBar');
+            
+            const interval = setInterval(() => {
+                if (width >= 100) {
+                    clearInterval(interval);
+                    showResult();
+                } else {
+                    width += 5;
+                    progressBar.style.width = width + '%';
+                    if(width == 30) addLog("SUMO 주행 경로(Routes) 생성 중...");
+                    if(width == 60) addLog("교통 신호등(TLS) 로직 검증 중...");
+                    if(width == 90) addLog("시뮬레이션 결과 데이터 렌더링 중...");
+                }
+            }, 150); // 총 3초 정도 걸림
+        }
+
+        function showResult() {
+            document.getElementById('loadingBox').style.display = 'none';
+            document.getElementById('fakeMap').style.display = 'block';
+            addLog("🟢 시뮬레이션 성공적으로 완료 및 시각화 표시 중.");
+        }
+    </script>
+</body>
+</html>
